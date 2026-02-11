@@ -239,7 +239,11 @@ class IntegrationGoogleTagManager:
                         self.rcx.persona.owner_fuser_id,
                         REQUIRED_SCOPES,
                     )
-                    r += f"\n❌ Not authenticated. Ask user to authorize at:\n{auth_url}\n"
+                    r += f"\n❌ Not authenticated. Please follow these steps:\n\n"
+                    r += f"1. Click this link to authorize Google:\n{auth_url}\n\n"
+                    r += f"2. After authorizing, you'll be redirected to your profile page\n"
+                    r += f"3. Come back to this chat and say 'try again' or ask your question again\n\n"
+                    r += f"The authorization will be saved and I'll be able to access your Google Tag Manager.\n"
                 except gql.transport.exceptions.TransportQueryError as e:
                     r += f"\n❌ Error initiating OAuth: {e}\n"
             return r
@@ -256,7 +260,13 @@ class IntegrationGoogleTagManager:
                     self.rcx.persona.owner_fuser_id,
                     REQUIRED_SCOPES,
                 )
-                return f"❌ Not authenticated. Ask user to authorize at:\n{auth_url}\n\nThen retry this operation."
+                return (
+                    f"❌ Not authenticated. Please follow these steps:\n\n"
+                    f"1. Click this link to authorize Google:\n{auth_url}\n\n"
+                    f"2. After authorizing, you'll be redirected to your profile page\n"
+                    f"3. Come back to this chat and say 'try again' or ask your question again\n\n"
+                    f"The authorization will be saved and I'll be able to access your Google Tag Manager.\n"
+                )
             except gql.transport.exceptions.TransportQueryError as e:
                 return f"❌ Failed to initiate OAuth: {e}"
 
