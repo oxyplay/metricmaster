@@ -103,13 +103,10 @@ print("MetricMaster processing %d messages" % len(messages))
 
 async def install(
     client: ckit_client.FlexusClient,
-    ws_id: str,
     bot_name: str,
     bot_version: str,
     tools: list[ckit_cloudtool.CloudTool],
 ):
-    bot_internal_tools = json.dumps([t.openai_style_tool() for t in tools])
-
     pic_big_path = Path(__file__).with_name("metricmaster-1024x1536.webp")
     pic_small_path = Path(__file__).with_name("metricmaster-256x256.webp")
 
@@ -117,17 +114,32 @@ async def install(
         pic_big = base64.b64encode(pic_big_path.read_bytes()).decode("ascii")
     else:
         pic_big = ""
-        logger.warning("Big image not found at %s", pic_big_path)
 
     if pic_small_path.exists():
         pic_small = base64.b64encode(pic_small_path.read_bytes()).decode("ascii")
     else:
         pic_small = ""
-        logger.warning("Small image not found at %s", pic_small_path)
+
+    experts = [
+        ("default", ckit_bot_install.FMarketplaceExpertInput(
+            fexp_system_prompt=metricmaster_prompts.main_prompt,
+            fexp_python_kernel=METRICMASTER_DEFAULT_LARK,
+            fexp_block_tools="",
+            fexp_allow_tools="",
+            fexp_description="Main expert for interactive analytics setup, configuration, and reporting",
+        )),
+        ("scheduled", ckit_bot_install.FMarketplaceExpertInput(
+            fexp_system_prompt=metricmaster_prompts.scheduled_prompt,
+            fexp_python_kernel=METRICMASTER_DEFAULT_LARK,
+            fexp_block_tools="",
+            fexp_allow_tools="",
+            fexp_description="Scheduled expert for automated report generation",
+        )),
+    ]
 
     await ckit_bot_install.marketplace_upsert_dev_bot(
         client,
-        ws_id=ws_id,
+        ws_id=client.ws_id,
         marketable_name=bot_name,
         marketable_version=bot_version,
         marketable_accent_color="#4285F4",
@@ -161,24 +173,7 @@ async def install(
         marketable_preferred_model_default="grok-4-1-fast-reasoning",
         marketable_daily_budget_default=200_000,
         marketable_default_inbox_default=10_000,
-        marketable_experts=[
-            ("default", ckit_bot_install.FMarketplaceExpertInput(
-                fexp_system_prompt=metricmaster_prompts.main_prompt,
-                fexp_python_kernel=METRICMASTER_DEFAULT_LARK,
-                fexp_block_tools="",
-                fexp_allow_tools="",
-                fexp_app_capture_tools=bot_internal_tools,
-                fexp_description="Main expert for interactive analytics setup, configuration, and reporting",
-            )),
-            ("scheduled", ckit_bot_install.FMarketplaceExpertInput(
-                fexp_system_prompt=metricmaster_prompts.scheduled_prompt,
-                fexp_python_kernel=METRICMASTER_DEFAULT_LARK,
-                fexp_block_tools="",
-                fexp_allow_tools="",
-                fexp_app_capture_tools=bot_internal_tools,
-                fexp_description="Scheduled expert for automated report generation",
-            )),
-        ],
+        marketable_experts=[(name, exp.filter_tools(tools)) for name, exp in experts],
         marketable_tags=["Analytics", "Google Analytics", "Tag Manager", "Reports"],
         marketable_picture_big_b64=pic_big,
         marketable_picture_small_b64=pic_small,
@@ -197,6 +192,14 @@ async def install(
             },
         ],
         marketable_forms=ckit_bot_install.load_form_bundles(__file__),
+        marketable_auth_supported=["google"],
+        marketable_auth_scopes={
+            "google": [
+                "https://www.googleapis.com/auth/analytics.readonly",
+                "https://www.googleapis.com/auth/tagmanager.edit.containers",
+                "https://www.googleapis.com/auth/tagmanager.readonly",
+            ]
+        },
     )
 
 
@@ -207,4 +210,4 @@ if __name__ == "__main__":
     from metricmaster import metricmaster_bot
     args = ckit_bot_install.bot_install_argparse()
     client = ckit_client.FlexusClient("metricmaster_install")
-    asyncio.run(install(client, ws_id=args.ws, bot_name=metricmaster_bot.BOT_NAME, bot_version=metricmaster_bot.BOT_VERSION, tools=metricmaster_bot.TOOLS))
+    asyncio.run(install(client, bot_name=metricmaster_bot.BOT_NAME, bot_version=metricmaster_bot.BOT_VERSION, tools=metricmaster_bot.TOOLS))

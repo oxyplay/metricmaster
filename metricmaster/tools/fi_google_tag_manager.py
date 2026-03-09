@@ -231,44 +231,19 @@ class IntegrationGoogleTagManager:
             r += f"  User: {self.rcx.persona.owner_fuser_id}\n"
             r += f"  Workspace: {self.rcx.persona.ws_id}\n"
             if not authenticated:
-                try:
-                    auth_url = await ckit_external_auth.start_external_auth_flow(
-                        self.fclient,
-                        "google",
-                        self.rcx.persona.ws_id,
-                        self.rcx.persona.owner_fuser_id,
-                        REQUIRED_SCOPES,
-                    )
-                    r += f"\n❌ Not authenticated. Please follow these steps:\n\n"
-                    r += f"1. Click this link to authorize Google:\n{auth_url}\n\n"
-                    r += f"2. After authorizing, you'll be redirected to your profile page\n"
-                    r += f"3. Come back to this chat and say 'try again' or ask your question again\n\n"
-                    r += f"The authorization will be saved and I'll be able to access your Google Tag Manager.\n"
-                except gql.transport.exceptions.TransportQueryError as e:
-                    r += f"\n❌ Error initiating OAuth: {e}\n"
+                r += f"\n❌ Not authenticated. Please connect Google in workspace settings:\n"
+                r += f"{self.rcx.fclient.web_url}/ws/{self.rcx.persona.ws_id}/persona/{self.rcx.persona.persona_id}?action=integrations\n"
             return r
 
         if print_help:
             return HELP
 
         if not authenticated:
-            try:
-                auth_url = await ckit_external_auth.start_external_auth_flow(
-                    self.fclient,
-                    "google",
-                    self.rcx.persona.ws_id,
-                    self.rcx.persona.owner_fuser_id,
-                    REQUIRED_SCOPES,
-                )
-                return (
-                    f"❌ Not authenticated. Please follow these steps:\n\n"
-                    f"1. Click this link to authorize Google:\n{auth_url}\n\n"
-                    f"2. After authorizing, you'll be redirected to your profile page\n"
-                    f"3. Come back to this chat and say 'try again' or ask your question again\n\n"
-                    f"The authorization will be saved and I'll be able to access your Google Tag Manager.\n"
-                )
-            except gql.transport.exceptions.TransportQueryError as e:
-                return f"❌ Failed to initiate OAuth: {e}"
+            return (
+                f"❌ Not authenticated. Please connect Google in workspace settings:\n\n"
+                f"{self.rcx.fclient.web_url}/ws/{self.rcx.persona.ws_id}/persona/{self.rcx.persona.persona_id}?action=integrations\n\n"
+                f"Then retry this operation."
+            )
 
         try:
             if op == "listAccounts":

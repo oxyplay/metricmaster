@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import json
+import time
+from pathlib import Path
 from typing import Dict, Any
 
 from pymongo import AsyncMongoClient
@@ -12,8 +14,8 @@ from flexus_client_kit import ckit_shutdown
 from flexus_client_kit import ckit_ask_model
 from flexus_client_kit import ckit_mongo
 from flexus_client_kit import ckit_kanban
+from flexus_client_kit import ckit_integrations_db
 from flexus_client_kit.integrations import fi_mongo_store
-from flexus_client_kit.integrations import fi_pdoc
 from flexus_client_kit.integrations import fi_google_analytics
 from flexus_client_kit.integrations import fi_question
 from metricmaster import metricmaster_install
@@ -25,13 +27,34 @@ logger = logging.getLogger("bot_metricmaster")
 BOT_NAME = "metricmaster"
 BOT_VERSION = "0.1.0"
 
+
+METRICMASTER_INTEGRATIONS: list[ckit_integrations_db.IntegrationRecord] = ckit_integrations_db.static_integrations_load(
+    Path(__file__).parent,
+    allowlist=[
+        "flexus_policy_document",
+        "skills",
+    ],
+    builtin_skills=[],
+)
+
+
+async def _metricmaster_install_wrapper(client: ckit_client.FlexusClient, ws_id: str) -> None:
+    from metricmaster import metricmaster_bot
+    await metricmaster_install.install(
+        client,
+        bot_name=metricmaster_bot.BOT_NAME,
+        bot_version=metricmaster_bot.BOT_VERSION,
+        tools=metricmaster_bot.TOOLS,
+    )
+
+
 TOOLS = [
     fi_google_analytics.GOOGLE_ANALYTICS_TOOL,
     fi_google_analytics_enhanced.GOOGLE_ANALYTICS_ENHANCED_TOOL,
     fi_google_tag_manager.GOOGLE_TAG_MANAGER_TOOL,
     fi_mongo_store.MONGO_STORE_TOOL,
-    fi_pdoc.POLICY_DOCUMENT_TOOL,
     fi_question.ASK_QUESTIONS_TOOL,
+    *[t for rec in METRICMASTER_INTEGRATIONS for t in rec.integr_tools],
 ]
 
 
@@ -40,13 +63,13 @@ async def metricmaster_main_loop(fclient: ckit_client.FlexusClient, rcx: ckit_bo
         metricmaster_install.METRICMASTER_SETUP_SCHEMA,
         rcx.persona.persona_setup,
     )
+    integr_objects = await ckit_integrations_db.main_loop_integrations_init(METRICMASTER_INTEGRATIONS, rcx, setup)
 
     mongo_conn_str = await ckit_mongo.mongo_fetch_creds(fclient, rcx.persona.persona_id)
     mongo = AsyncMongoClient(mongo_conn_str)
     dbname = rcx.persona.persona_id + "_db"
     mydb = mongo[dbname]
     personal_mongo = mydb["personal_mongo"]
-    pdoc_integration = fi_pdoc.IntegrationPdoc(rcx, rcx.persona.ws_root_group_id)
 
     ga_integration = fi_google_analytics.IntegrationGoogleAnalytics(fclient, rcx)
     ga_enhanced_integration = fi_google_analytics_enhanced.IntegrationGoogleAnalyticsEnhanced(
@@ -89,13 +112,9 @@ async def metricmaster_main_loop(fclient: ckit_client.FlexusClient, rcx: ckit_bo
             model_produced_args,
         )
 
-    @rcx.on_tool_call(fi_pdoc.POLICY_DOCUMENT_TOOL.name)
-    async def toolcall_pdoc(toolcall: ckit_cloudtool.FCloudtoolCall, model_produced_args: Dict[str, Any]) -> str:
-        return await pdoc_integration.called_by_model(toolcall, model_produced_args)
-
     @rcx.on_tool_call(fi_question.ASK_QUESTIONS_TOOL.name)
     async def toolcall_ask_questions(toolcall: ckit_cloudtool.FCloudtoolCall, model_produced_args: Dict[str, Any]) -> str:
-        return fi_question.handle_ask_questions(toolcall, model_produced_args)
+        return await fi_question.handle_ask_questions(toolcall, model_produced_args)
 
     try:
         while not ckit_shutdown.shutdown_event.is_set():
@@ -117,7 +136,7 @@ def main():
         bot_main_loop=metricmaster_main_loop,
         inprocess_tools=TOOLS,
         scenario_fn=scenario_fn,
-        install_func=metricmaster_install.install,
+        install_func=_metricmaster_install_wrapper,
     ))
 
 
